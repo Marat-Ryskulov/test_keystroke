@@ -430,28 +430,22 @@ class MainWindow:
         self.show_user_dashboard()
     
     def show_model_stats(self):
-        """Показать базовую статистику модели"""
+        """Показать статистику модели"""
         if not self.current_user or not self.current_user.is_trained:
             messagebox.showwarning("Предупреждение", "Модель не обучена")
             return
     
         try:
-            from gui.model_stats_window import ModelStatsWindow
-            ModelStatsWindow(self.root, self.current_user, self.keystroke_auth)
+            # Используем новое упрощенное окно статистики
+            from gui.diploma_stats_window import DiplomaStatsWindow
+            DiplomaStatsWindow(self.root, self.current_user, self.keystroke_auth)
         except Exception as e:
             messagebox.showerror("Ошибка", f"Ошибка статистики: {str(e)}")
     
     def show_enhanced_stats(self):
-        """Показать продвинутую статистику модели"""
-        if not self.current_user or not self.current_user.is_trained:
-            messagebox.showwarning("Предупреждение", "Модель не обучена")
-            return
-    
-        try:
-            from gui.enhanced_model_stats_window import EnhancedModelStatsWindow
-            EnhancedModelStatsWindow(self.root, self.current_user, self.keystroke_auth)
-        except Exception as e:
-            messagebox.showerror("Ошибка", f"Ошибка продвинутой статистики: {str(e)}")
+        """Альтернативное название для того же окна статистики"""
+        # Теперь это тоже самое окно, убираем дублирование
+        self.show_model_stats()
     
     def open_csv_folder(self):
         """Открытие папки с CSV файлами"""

@@ -271,7 +271,7 @@ class MainWindow:
             # Кнопка обучения - самая важная
             train_btn = ttk.Button(
                 actions_frame,
-                text="🎓 Начать обучение",
+                text="Начать обучение",
                 style='Big.TButton',
                 command=self.start_training
             )
@@ -280,89 +280,89 @@ class MainWindow:
             # Сетка кнопок для обученной модели
             buttons_grid = ttk.Frame(actions_frame)
             buttons_grid.pack(fill=tk.X)
-            
-            # Ряд 1
+        
+            # Ряд 1 - основные функции
             row1 = ttk.Frame(buttons_grid)
             row1.pack(fill=tk.X, pady=2)
-            
+        
             test_btn = ttk.Button(
                 row1,
-                text="🔐 Тест входа",
+                text="Тест входа",
                 style='Compact.TButton',
                 command=self.test_authentication
             )
-            test_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 3))
-            
+            test_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 2))
+        
             stats_btn = ttk.Button(
                 row1,
-                text="📊 Статистика",
+                text="Статистика",
                 style='Compact.TButton',
-                command=self.show_model_stats
+                command=self.show_simple_stats
             )
-            stats_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=3)
-            
-            enhanced_btn = ttk.Button(
+            stats_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        
+            # НОВАЯ КНОПКА - Контролируемое тестирование
+            controlled_test_btn = ttk.Button(
                 row1,
-                text="📈 Продвинутая",
+                text="Тест эффективности",
                 style='Compact.TButton',
-                command=self.show_enhanced_stats
+                command=self.start_controlled_testing
             )
-            enhanced_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(3, 0))
-            
-            # Ряд 2
+            controlled_test_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(2, 0))
+        
+            # Ряд 2 - дополнительные функции
             row2 = ttk.Frame(buttons_grid)
             row2.pack(fill=tk.X, pady=2)
-            
+        
             retrain_btn = ttk.Button(
                 row2,
-                text="🔄 Переобучить",
+                text="Переобучить",
                 style='Compact.TButton',
                 command=self.reset_and_retrain
             )
-            retrain_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 3))
-            
+            retrain_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 2))
+        
             csv_btn = ttk.Button(
                 row2,
-                text="📁 CSV файлы",
+                text="CSV файлы",
                 style='Compact.TButton',
                 command=self.open_csv_folder
             )
-            csv_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=3)
-            
+            csv_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        
             logout_btn = ttk.Button(
                 row2,
-                text="🚪 Выйти",
+                text="Выйти",
                 style='Compact.TButton',
                 command=self.logout
             )
-            logout_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(3, 0))
+            logout_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(2, 0))
+    
+        # Остальные кнопки для необученной модели
+        if not self.current_user.is_trained:
+            general_frame = ttk.Frame(self.main_frame)
+            general_frame.pack(fill=tk.X, pady=5)
         
-        # Кнопки общего назначения
-        general_frame = ttk.Frame(self.main_frame)
-        general_frame.pack(fill=tk.X, pady=5)
-        
-        if self.current_user.is_trained:
-            pass  # Кнопки уже добавлены выше
-        else:
-            # Дополнительные кнопки для необученной модели
             extra_row = ttk.Frame(general_frame)
             extra_row.pack(fill=tk.X)
-            
+        
             csv_btn = ttk.Button(
                 extra_row,
-                text="📁 CSV файлы",
+                text="CSV файлы",
                 style='Compact.TButton',
                 command=self.open_csv_folder
             )
             csv_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 3))
-            
+        
             logout_btn = ttk.Button(
                 extra_row,
-                text="🚪 Выйти",
+                text="Выйти",
                 style='Compact.TButton',
                 command=self.logout
             )
             logout_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(3, 0))
+
+        
     
     def start_training(self):
         """Начать процесс обучения"""
@@ -430,22 +430,13 @@ class MainWindow:
         self.show_user_dashboard()
     
     def show_model_stats(self):
-        """Показать статистику модели"""
-        if not self.current_user or not self.current_user.is_trained:
-            messagebox.showwarning("Предупреждение", "Модель не обучена")
-            return
-    
-        try:
-            # Используем новое упрощенное окно статистики
-            from gui.diploma_stats_window import DiplomaStatsWindow
-            DiplomaStatsWindow(self.root, self.current_user, self.keystroke_auth)
-        except Exception as e:
-            messagebox.showerror("Ошибка", f"Ошибка статистики: {str(e)}")
+        """Показать статистику модели (теперь упрощенную)"""
+        self.show_simple_stats()
     
     def show_enhanced_stats(self):
         """Альтернативное название для того же окна статистики"""
         # Теперь это тоже самое окно, убираем дублирование
-        self.show_model_stats()
+        self.show_simple_stats()
     
     def open_csv_folder(self):
         """Открытие папки с CSV файлами"""
@@ -490,3 +481,45 @@ class MainWindow:
         )
         self.current_user = user
         self.show_user_dashboard()
+
+
+    def show_simple_stats(self):
+        """Показать упрощенную статистику"""
+        if not self.current_user or not self.current_user.is_trained:
+            messagebox.showwarning("Предупреждение", "Модель не обучена")
+            return
+
+        try:
+            from gui.simplified_stats_window import SimplifiedStatsWindow
+            SimplifiedStatsWindow(self.root, self.current_user, self.keystroke_auth)
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Ошибка статистики: {str(e)}")
+
+    def start_controlled_testing(self):
+        """Запуск контролируемого тестирования эффективности"""
+        if not self.current_user or not self.current_user.is_trained:
+            messagebox.showwarning("Предупреждение", "Модель не обучена")
+            return
+    
+        # Проверяем достаточность обучающих данных
+        training_samples = self.password_auth.db.get_user_training_samples(self.current_user.id)
+        if len(training_samples) < 30:
+            messagebox.showwarning("Предупреждение", 
+                f"Для корректного тестирования рекомендуется минимум 30 обучающих образцов.\n"
+                f"У вас: {len(training_samples)} образцов.\n\n"
+                f"Вы можете продолжить, но результаты могут быть менее точными.")
+    
+        if messagebox.askyesno("Контролируемое тестирование",
+            "Запустить тестирование эффективности системы?\n\n"
+            "Процесс включает:\n"
+            "1. Ввод образцов в обычном темпе (10 раз)\n"
+            "2. Ввод образцов в измененном темпе (10 раз)\n"
+            "3. Расчет метрик FAR, FRR, EER\n"
+            "4. Построение ROC-кривой\n\n"
+            "Это займет около 10-15 минут."):
+        
+            try:
+                from gui.controlled_testing_window import ControlledTestingWindow
+                ControlledTestingWindow(self.root, self.current_user, self.keystroke_auth)
+            except Exception as e:
+                messagebox.showerror("Ошибка", f"Ошибка запуска тестирования: {str(e)}")

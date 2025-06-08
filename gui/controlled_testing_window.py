@@ -1,4 +1,4 @@
-# gui/controlled_testing_window.py - Контролируемое тестирование эффективности
+# gui/controlled_testing_window.py - Исправленное контролируемое тестирование с отдельным окном результатов
 
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -38,7 +38,7 @@ class ControlledTestingWindow:
         # Создание окна
         self.window = tk.Toplevel(parent)
         self.window.title("Контролируемое тестирование эффективности")
-        self.window.geometry("800x900")
+        self.window.geometry("800x700")  # Уменьшил высоту, убрав место под результаты
         self.window.resizable(True, True)
         
         # Модальное окно
@@ -166,9 +166,6 @@ class ControlledTestingWindow:
             command=self.window.destroy
         )
         cancel_btn.pack(side=tk.LEFT, padx=5)
-        
-        # Область результатов (скрыта изначально)
-        self.results_frame = ttk.LabelFrame(main_frame, text="Результаты тестирования", padding=10)
         
         # Настройка записи нажатий
         self.setup_keystroke_recording()
@@ -358,20 +355,32 @@ class ControlledTestingWindow:
                 # Проверяем завершение фазы
                 self.check_phase_completion()
                 
-                # Пауза перед следующим образцом
-                self.text_entry.config(state=tk.DISABLED)
-                self.window.after(1000, self._enable_next_input)
+                # Если тестирование не завершено, делаем паузу перед следующим образцом
+                if self.current_phase != "completed":
+                    self.text_entry.config(state=tk.DISABLED)
+                    self.window.after(1000, self._enable_next_input)
                 
             except Exception as e:
                 messagebox.showerror("Ошибка", f"Ошибка сохранения: {str(e)}")
-                self.text_entry.delete(0, tk.END)
-                self.text_entry.focus()
+                # Проверяем, что виджеты еще существуют перед обращением к ним
+                try:
+                    if self.window.winfo_exists():
+                        self.text_entry.delete(0, tk.END)
+                        self.text_entry.focus()
+                except tk.TclError:
+                    pass
     
     def _enable_next_input(self):
         """Разрешение следующего ввода"""
-        self.text_entry.config(state=tk.NORMAL)
-        self.text_entry.focus()
-        self.status_label.config(text="", foreground="black")
+        # Проверяем, что окно еще существует
+        try:
+            if self.window.winfo_exists():
+                self.text_entry.config(state=tk.NORMAL)
+                self.text_entry.focus()
+                self.status_label.config(text="", foreground="black")
+        except tk.TclError:
+            # Окно уже уничтожено, ничего не делаем
+            pass
     
     def check_phase_completion(self):
         """Проверка завершения текущей фазы"""
@@ -405,22 +414,9 @@ class ControlledTestingWindow:
             self.next_phase()
     
     def show_results(self):
-        """Показ результатов тестирования"""
-        # Скрываем элементы ввода
-        for widget in [self.text_entry, self.submit_btn, self.skip_btn, 
-                      self.pangram_label, self.typing_progress_label, self.status_label]:
-            widget.pack_forget()
-        
-        # Показываем результаты
-        self.results_frame.pack(fill=tk.BOTH, expand=True, pady=10)
-        
-        # Анализируем данные и строим результаты
-        self.analyze_and_display_results()
-    
-    def analyze_and_display_results(self):
-        """Анализ данных и отображение результатов"""
+        """Показ результатов тестирования - теперь в отдельном окне"""
         try:
-            # Подготавливаем данные для анализа
+            # Анализируем данные
             legitimate_features = [sample['features'] for sample in self.legitimate_samples]
             impostor_features = [sample['features'] for sample in self.impostor_samples]
             
@@ -431,8 +427,11 @@ class ControlledTestingWindow:
             # Тестируем модель на собранных данных
             results = self.calculate_metrics(legitimate_features, impostor_features)
             
-            # Создаем интерфейс результатов
-            self.create_results_interface(results)
+            # Создаем отдельное окно для результатов
+            ResultsWindow(self.parent, results, self.user)  # Используем self.parent вместо self.window
+            
+            # Закрываем окно тестирования
+            self.window.destroy()
             
         except Exception as e:
             messagebox.showerror("Ошибка", f"Ошибка анализа: {str(e)}")
@@ -500,48 +499,106 @@ class ControlledTestingWindow:
             'legitimate_count': len(legitimate_features),
             'impostor_count': len(impostor_features)
         }
+
+
+class ResultsWindow:
+    """Отдельное окно для отображения результатов тестирования"""
     
-    def create_results_interface(self, results: Dict):
+    def __init__(self, parent, results: Dict, user: User):
+        self.parent = parent
+        self.results = results
+        self.user = user
+        
+        # Создание окна
+        self.window = tk.Toplevel(parent)
+        self.window.title(f"Результаты контролируемого тестирования - {user.username}")
+        self.window.geometry("1400x900")
+        self.window.resizable(True, True)
+        
+        # Модальное окно
+        self.window.transient(parent)
+        self.window.grab_set()
+        
+        self.create_interface()
+    
+    def create_interface(self):
         """Создание интерфейса результатов"""
+        # Заголовок
+        header_frame = ttk.Frame(self.window, padding=10)
+        header_frame.pack(fill=tk.X)
+        
+        title_label = ttk.Label(
+            header_frame,
+            text=f"Результаты контролируемого тестирования - {self.user.username}",
+            font=(FONT_FAMILY, 16, 'bold')
+        )
+        title_label.pack()
+        
+        # Основной контейнер с прокруткой
+        main_canvas = tk.Canvas(self.window)
+        scrollbar = ttk.Scrollbar(self.window, orient="vertical", command=main_canvas.yview)
+        scrollable_frame = ttk.Frame(main_canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: main_canvas.configure(scrollregion=main_canvas.bbox("all"))
+        )
+        
+        main_canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        main_canvas.configure(yscrollcommand=scrollbar.set)
+        
+        main_canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Привязка колесика мыши
+        def _on_mousewheel(event):
+            main_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        main_canvas.bind("<MouseWheel>", _on_mousewheel)
+        
         # Текстовые результаты
-        text_frame = ttk.Frame(self.results_frame)
-        text_frame.pack(fill=tk.X, pady=(0, 10))
+        text_frame = ttk.LabelFrame(scrollable_frame, text="Отчет", padding=10)
+        text_frame.pack(fill=tk.X, padx=10, pady=5)
         
-        results_text = tk.Text(text_frame, height=12, width=80, font=(FONT_FAMILY, 9))
-        scrollbar = ttk.Scrollbar(text_frame, orient=tk.VERTICAL, command=results_text.yview)
-        results_text.configure(yscrollcommand=scrollbar.set)
+        self.results_text = tk.Text(text_frame, height=15, width=120, font=(FONT_FAMILY, 9))
+        text_scrollbar = ttk.Scrollbar(text_frame, orient=tk.VERTICAL, command=self.results_text.yview)
+        self.results_text.configure(yscrollcommand=text_scrollbar.set)
         
-        results_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
-        # Генерируем отчет
-        report = self.generate_report(results)
-        results_text.insert('1.0', report)
-        results_text.config(state=tk.DISABLED)
+        self.results_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        text_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
         # Графики
-        self.create_charts(results)
+        charts_frame = ttk.LabelFrame(scrollable_frame, text="Графики анализа", padding=10)
+        charts_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        self.create_charts(charts_frame)
         
         # Кнопки
-        button_frame = ttk.Frame(self.results_frame)
-        button_frame.pack(pady=10)
+        buttons_frame = ttk.Frame(scrollable_frame, padding=10)
+        buttons_frame.pack(fill=tk.X, padx=10, pady=5)
         
-        ttk.Button(button_frame, text="Сохранить отчет", 
-                  command=lambda: self.save_report(results)).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="Закрыть", 
-                  command=self.window.destroy).pack(side=tk.LEFT, padx=5)
+        ttk.Button(buttons_frame, text="Сохранить отчет", 
+                  command=self.save_report).pack(side=tk.LEFT, padx=5)
+        ttk.Button(buttons_frame, text="Закрыть", 
+                  command=self.window.destroy).pack(side=tk.RIGHT, padx=5)
+        
+        # Генерируем и показываем отчет
+        report = self.generate_report()
+        self.results_text.insert('1.0', report)
+        self.results_text.config(state=tk.DISABLED)
     
-    def generate_report(self, results: Dict) -> str:
+    def generate_report(self) -> str:
         """Генерация текстового отчета"""
-        optimal = results['optimal_result']
-        current = results['current_result']
+        optimal = self.results['optimal_result']
+        current = self.results['current_result']
         
         report = f"""РЕЗУЛЬТАТЫ КОНТРОЛИРУЕМОГО ТЕСТИРОВАНИЯ ЭФФЕКТИВНОСТИ
 
+Пользователь: {self.user.username}
+Дата тестирования: {datetime.now().strftime('%d.%m.%Y %H:%M')}
+
 Данные тестирования:
-• Легитимных образцов: {results['legitimate_count']}
-• Имитационных образцов: {results['impostor_count']}
-• Дата тестирования: {datetime.now().strftime('%d.%m.%Y %H:%M')}
+• Легитимных образцов: {self.results['legitimate_count']}
+• Имитационных образцов: {self.results['impostor_count']}
 
 Метрики при текущем пороге (75%):
 • FAR (False Acceptance Rate): {current['far']:.2f}%
@@ -592,21 +649,21 @@ Confusion Matrix (текущий порог):
         
         return '\n'.join(interpretations)
     
-    def create_charts(self, results: Dict):
+    def create_charts(self, parent_frame):
         """Создание графиков"""
         # Создаем фигуру с графиками
-        fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(12, 8))
+        fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(14, 10))
         fig.suptitle('Результаты контролируемого тестирования', fontsize=14, fontweight='bold')
         
         # График 1: FAR vs FRR vs Порог
-        thresholds = [r['threshold'] * 100 for r in results['metrics_results']]
-        far_values = [r['far'] for r in results['metrics_results']]
-        frr_values = [r['frr'] for r in results['metrics_results']]
+        thresholds = [r['threshold'] * 100 for r in self.results['metrics_results']]
+        far_values = [r['far'] for r in self.results['metrics_results']]
+        frr_values = [r['frr'] for r in self.results['metrics_results']]
         
         ax1.plot(thresholds, far_values, 'r-o', label='FAR', linewidth=2, markersize=4)
         ax1.plot(thresholds, frr_values, 'b-s', label='FRR', linewidth=2, markersize=4)
         ax1.axvline(75, color='gray', linestyle='--', alpha=0.7, label='Текущий порог')
-        ax1.axvline(results['optimal_result']['threshold'] * 100, color='green', 
+        ax1.axvline(self.results['optimal_result']['threshold'] * 100, color='green', 
                    linestyle='--', alpha=0.7, label='Оптимальный порог')
         ax1.set_xlabel('Порог (%)')
         ax1.set_ylabel('Частота ошибок (%)')
@@ -615,10 +672,10 @@ Confusion Matrix (текущий порог):
         ax1.grid(True, alpha=0.3)
         
         # График 2: EER vs Порог
-        eer_values = [r['eer'] for r in results['metrics_results']]
+        eer_values = [r['eer'] for r in self.results['metrics_results']]
         ax2.plot(thresholds, eer_values, 'g-^', label='EER', linewidth=3, markersize=6)
         ax2.axvline(75, color='gray', linestyle='--', alpha=0.7, label='Текущий порог')
-        ax2.axvline(results['optimal_result']['threshold'] * 100, color='green', 
+        ax2.axvline(self.results['optimal_result']['threshold'] * 100, color='green', 
                    linestyle='--', alpha=0.7, label='Оптимальный порог')
         ax2.set_xlabel('Порог (%)')
         ax2.set_ylabel('EER (%)')
@@ -629,7 +686,7 @@ Confusion Matrix (текущий порог):
         # График 3: ROC кривая
         try:
             from sklearn.metrics import roc_curve, auc
-            fpr, tpr, _ = roc_curve(results['all_labels'], results['all_confidences'])
+            fpr, tpr, _ = roc_curve(self.results['all_labels'], self.results['all_confidences'])
             roc_auc = auc(fpr, tpr)
             
             ax3.plot(fpr, tpr, color='darkorange', lw=3, label=f'ROC кривая (AUC = {roc_auc:.3f})')
@@ -646,8 +703,8 @@ Confusion Matrix (текущий порог):
                     ha='center', va='center', transform=ax3.transAxes)
         
         # График 4: Распределение уверенности
-        legitimate_confidences = results['all_confidences'][:results['legitimate_count']]
-        impostor_confidences = results['all_confidences'][results['legitimate_count']:]
+        legitimate_confidences = self.results['all_confidences'][:self.results['legitimate_count']]
+        impostor_confidences = self.results['all_confidences'][self.results['legitimate_count']:]
         
         ax4.hist(impostor_confidences, bins=15, alpha=0.7, color='red', 
                 label=f'Имитаторы ({len(impostor_confidences)})', density=True, edgecolor='darkred')
@@ -663,11 +720,11 @@ Confusion Matrix (текущий порог):
         plt.tight_layout()
         
         # Встраиваем график в интерфейс
-        canvas = FigureCanvasTkAgg(fig, self.results_frame)
+        canvas = FigureCanvasTkAgg(fig, parent_frame)
         canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True, pady=10)
         canvas.draw()
     
-    def save_report(self, results: Dict):
+    def save_report(self):
         """Сохранение отчета"""
         try:
             from tkinter import filedialog
@@ -684,18 +741,18 @@ Confusion Matrix (текущий порог):
                     report_data = {
                         'user': self.user.username,
                         'test_date': datetime.now().isoformat(),
-                        'legitimate_samples': results['legitimate_count'],
-                        'impostor_samples': results['impostor_count'],
-                        'current_metrics': results['current_result'],
-                        'optimal_metrics': results['optimal_result'],
-                        'all_metrics': results['metrics_results']
+                        'legitimate_samples': self.results['legitimate_count'],
+                        'impostor_samples': self.results['impostor_count'],
+                        'current_metrics': self.results['current_result'],
+                        'optimal_metrics': self.results['optimal_result'],
+                        'all_metrics': self.results['metrics_results']
                     }
                     
                     with open(filename, 'w', encoding='utf-8') as f:
                         json.dump(report_data, f, indent=2, ensure_ascii=False)
                 else:
                     # Текстовый отчет
-                    report = self.generate_report(results)
+                    report = self.generate_report()
                     with open(filename, 'w', encoding='utf-8') as f:
                         f.write(report)
                 

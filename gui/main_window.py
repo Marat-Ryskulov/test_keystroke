@@ -6,9 +6,11 @@ from typing import Optional
 
 from gui.login_window import LoginWindow
 from gui.register_window import RegisterWindow
+from gui.training_visualization_window import TrainingVisualizationWindow
 from models.user import User
 from auth.password_auth import PasswordAuthenticator
 from auth.keystroke_auth import KeystrokeAuthenticator
+
 import config
 from config import APP_NAME, WINDOW_WIDTH, WINDOW_HEIGHT, FONT_FAMILY, FONT_SIZE
 
@@ -242,25 +244,7 @@ class MainWindow:
             )
             progress_bar.pack(pady=8)
     
-        # Компактная статистика
-        stats_frame = ttk.LabelFrame(self.main_frame, text="Статистика", padding=10)
-        stats_frame.pack(fill=tk.X, pady=(0, 10))
-    
-        try:
-            training_samples = self.password_auth.db.get_user_training_samples(self.current_user.id)
-            training_samples_count = len(training_samples)
-            auth_attempts = self.password_auth.db.get_auth_attempts(self.current_user.id, limit=50)
-            auth_attempts_count = len(auth_attempts)
-        
-            # Горизонтальная статистика
-            stats_text = f"Обучающих: {training_samples_count} | Попыток входа: {auth_attempts_count} | Регистрация: {self.current_user.created_at.strftime('%d.%m.%Y')}"
-        
-            stats_label = ttk.Label(stats_frame, text=stats_text, style='Info.TLabel')
-            stats_label.pack()
-        
-        except Exception as e:
-            error_label = ttk.Label(stats_frame, text=f"Ошибка статистики: {str(e)}", style='Error.TLabel')
-            error_label.pack()
+
     
         # ОСНОВНЫЕ КНОПКИ ДЕЙСТВИЙ - всегда видны
         actions_frame = ttk.LabelFrame(self.main_frame, text="Действия", padding=10)
@@ -300,15 +284,18 @@ class MainWindow:
                 command=self.show_simple_stats
             )
             stats_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        
-            # НОВАЯ КНОПКА - Контролируемое тестирование
-            controlled_test_btn = ttk.Button(
+
+
+            # НОВАЯ КНОПКА - Результаты обучения
+            results_btn = ttk.Button(
                 row1,
-                text="Тест эффективности",
+                text="Результаты обучения",
                 style='Compact.TButton',
-                command=self.start_controlled_testing
+                command=self.show_training_results
             )
-            controlled_test_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(2, 0))
+            results_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(2, 0))
+
+        
         
             # Ряд 2 - дополнительные функции
             row2 = ttk.Frame(buttons_grid)
@@ -318,9 +305,19 @@ class MainWindow:
                 row2,
                 text="Переобучить",
                 style='Compact.TButton',
-                command=self.reset_and_retrain
+                command=self.retrain_model  # Используем новый метод
             )
             retrain_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 2))
+
+
+            # НОВАЯ КНОПКА - Контролируемое тестирование
+            controlled_test_btn = ttk.Button(
+                row1,
+                text="Тест эффективности",
+                style='Compact.TButton',
+                command=self.start_controlled_testing
+            )
+            controlled_test_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(2, 0))
         
             csv_btn = ttk.Button(
                 row2,
@@ -366,42 +363,13 @@ class MainWindow:
     
     def start_training(self):
         """Начать процесс обучения"""
-        choice = messagebox.askyesnocancel(
-            "Выбор метода обучения",
-            "Выберите метод обучения:\n\n"
-            "ДА - Продвинутое обучение (с валидацией)\n"
-            "НЕТ - Базовое обучение (быстрое)\n"
-            "ОТМЕНА - Отменить"
+        from gui.training_window import TrainingWindow
+        TrainingWindow(
+            self.root,
+            self.current_user,
+            self.keystroke_auth,
+            self.on_training_complete
         )
-    
-        if choice is None:
-            return
-        elif choice:
-            try:
-                from gui.enhanced_training_window import EnhancedTrainingWindow
-                EnhancedTrainingWindow(
-                    self.root,
-                    self.current_user,
-                    self.keystroke_auth,
-                    self.on_training_complete
-                )
-            except ImportError:
-                messagebox.showerror("Ошибка", "Модуль продвинутого обучения не найден.")
-                from gui.training_window import TrainingWindow
-                TrainingWindow(
-                    self.root,
-                    self.current_user,
-                    self.keystroke_auth,
-                    self.on_training_complete
-                )
-        else:
-            from gui.training_window import TrainingWindow
-            TrainingWindow(
-                self.root,
-                self.current_user,
-                self.keystroke_auth,
-                self.on_training_complete
-            )
     
     def test_authentication(self):
         """Тестирование аутентификации"""
@@ -427,6 +395,17 @@ class MainWindow:
         updated_user = self.password_auth.db.get_user_by_username(self.current_user.username)
         if updated_user:
             self.current_user = updated_user
+    
+        # Показываем визуализацию результатов обучения
+        try:
+            from ml.improved_model_trainer import ImprovedModelTrainer
+            trainer = ImprovedModelTrainer.load_model(self.current_user.id)
+            if trainer and trainer.training_stats:
+                from gui.training_visualization_window import TrainingVisualizationWindow
+                TrainingVisualizationWindow(self.root, self.current_user, trainer.training_stats)
+        except Exception as e:
+            print(f"Ошибка показа визуализации: {e}")
+    
         self.show_user_dashboard()
     
     def show_model_stats(self):
@@ -523,3 +502,111 @@ class MainWindow:
                 ControlledTestingWindow(self.root, self.current_user, self.keystroke_auth)
             except Exception as e:
                 messagebox.showerror("Ошибка", f"Ошибка запуска тестирования: {str(e)}")
+
+
+
+    def retrain_model(self):
+        """Переобучение модели на существующих данных"""
+        if not self.current_user:
+            return
+    
+        # Проверяем количество образцов
+        try:
+            training_samples = self.password_auth.db.get_user_training_samples(self.current_user.id)
+            from config import MIN_TRAINING_SAMPLES
+        
+            if len(training_samples) < MIN_TRAINING_SAMPLES:
+                messagebox.showwarning(
+                    "Недостаточно данных",
+                    f"Для переобучения нужно минимум {MIN_TRAINING_SAMPLES} образцов.\n"
+                    f"У вас: {len(training_samples)} образцов.\n"
+                    f"Соберите недостающие образцы через 'Начать обучение'."
+                )
+                return
+        
+            if messagebox.askyesno(
+                "Переобучение модели",
+                f"Переобучить модель на {len(training_samples)} существующих образцах?\n\n"
+                f"Это займет несколько секунд."
+            ):
+                # Показываем прогресс
+                progress_window = tk.Toplevel(self.root)
+                progress_window.title("Переобучение модели")
+                progress_window.geometry("300x100")
+                progress_window.transient(self.root)
+                progress_window.grab_set()
+            
+                ttk.Label(progress_window, text="Переобучение модели...").pack(pady=20)
+                progress_bar = ttk.Progressbar(progress_window, mode='indeterminate')
+                progress_bar.pack(pady=10)
+                progress_bar.start()
+            
+                def train_in_thread():
+                    try:
+                        # Переобучаем модель
+                        success, accuracy, message = self.keystroke_auth.train_user_model(self.current_user)
+                    
+                        # Обновляем интерфейс в главном потоке
+                        self.root.after(0, lambda: self._training_completed(
+                            success, accuracy, message, progress_window
+                        ))
+                    except Exception as e:
+                        self.root.after(0, lambda: self._training_completed(
+                            False, 0.0, f"Ошибка: {str(e)}", progress_window
+                        ))
+            
+                import threading
+                threading.Thread(target=train_in_thread, daemon=True).start()
+            
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Ошибка при переобучении: {str(e)}")
+
+
+    def _training_completed(self, success: bool, accuracy: float, message: str, progress_window):
+        """Завершение переобучения"""
+        progress_window.destroy()
+    
+        if success:
+            # Обновляем статус пользователя
+            updated_user = self.password_auth.db.get_user_by_username(self.current_user.username)
+            if updated_user:
+                self.current_user = updated_user
+        
+            # Показываем результаты
+            messagebox.showinfo("Успех", f"{message}")
+        
+            # Показываем визуализацию
+            try:
+                from ml.improved_model_trainer import ImprovedModelTrainer
+                trainer = ImprovedModelTrainer.load_model(self.current_user.id)
+                if trainer and trainer.training_stats:
+                    from gui.training_visualization_window import TrainingVisualizationWindow
+                    TrainingVisualizationWindow(self.root, self.current_user, trainer.training_stats)
+            except Exception as e:
+                print(f"Ошибка показа визуализации: {e}")
+        
+            # Обновляем интерфейс
+            self.show_user_dashboard()
+        else:
+            messagebox.showerror("Ошибка", message)
+
+
+    def show_training_results(self):
+        """Показать результаты последнего обучения модели"""
+        if not self.current_user or not self.current_user.is_trained:
+            messagebox.showwarning("Предупреждение", "Модель не обучена")
+            return
+    
+        try:
+            from ml.improved_model_trainer import ImprovedModelTrainer
+            trainer = ImprovedModelTrainer.load_model(self.current_user.id)
+        
+            if trainer and trainer.training_stats:
+                from gui.training_visualization_window import TrainingVisualizationWindow
+                TrainingVisualizationWindow(self.root, self.current_user, trainer.training_stats)
+            else:
+                messagebox.showinfo("Информация", 
+                    "Результаты обучения не найдены.\n"
+                    "Переобучите модель для получения детальной статистики.")
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Ошибка загрузки результатов: {str(e)}")
